@@ -14,16 +14,22 @@ static void errorExit(const char *msg) {
 }
 
 int main(int argc, char **argv) {
-    if (argc != 3) {
-        std::fprintf(stderr, "Usage: %s <host> <port>\n", argv[0]);
-        return 1;
-    }
+    // Ulepszone: accepts optional <host> <port> [nick]
+    const char *host = "127.0.0.1";
+    const char *port = "5555";
+    std::string nick;
+    
+    if (argc >= 2) host = argv[1];
+    if (argc >= 3) port = argv[2];
+    if (argc >= 4) nick = argv[3];
+    
+    std::fprintf(stdout, "Łączenie do %s:%s\n", host, port);
 
     addrinfo hints{};
     hints.ai_family = AF_INET;
     hints.ai_socktype = SOCK_STREAM;
     addrinfo *res;
-    int rv = getaddrinfo(argv[1], argv[2], &hints, &res);
+    int rv = getaddrinfo(host, port, &hints, &res);
     if (rv != 0) {
         std::fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rv));
         return 1;
@@ -33,24 +39,29 @@ int main(int argc, char **argv) {
     if (sock < 0) errorExit("socket");
     if (connect(sock, res->ai_addr, res->ai_addrlen) < 0) errorExit("connect");
     freeaddrinfo(res);
+    
+    std::printf("Połączono do serwera!\n");
 
     // Ustawienie nicku na początku – w pętli aż do OK
     while (true) {
-        char nickBuf[64];
-        std::printf("Podaj swój nick (puste = anonim): ");
-        std::fflush(stdout);
+        if (nick.empty()) {
+            char nickBuf[64];
+            std::printf("Podaj swój nick (puste = anonim): ");
+            std::fflush(stdout);
 
-        if (!std::fgets(nickBuf, sizeof(nickBuf), stdin)) {
-            std::fprintf(stderr, "Błąd odczytu nicku.\n");
-            close(sock);
-            return 1;
+            if (!std::fgets(nickBuf, sizeof(nickBuf), stdin)) {
+                std::fprintf(stderr, "Błąd odczytu nicku.\n");
+                close(sock);
+                return 1;
+            }
+
+            size_t len = std::strlen(nickBuf);
+            if (len > 0 && nickBuf[len-1] == '\n') nickBuf[len-1] = '\0';
+            nick = nickBuf;
         }
 
-        size_t len = std::strlen(nickBuf);
-        if (len > 0 && nickBuf[len-1] == '\n') nickBuf[len-1] = '\0';
-
         std::string nickCmd = "NICK ";
-        nickCmd += nickBuf;  // może być pusty => anonimXYZ po stronie serwera
+        nickCmd += nick;  // może być pusty => anonimXYZ po stronie serwera
         nickCmd += "\n";
 
         if (write(sock, nickCmd.c_str(), nickCmd.size()) != (ssize_t)nickCmd.size()) {
@@ -71,6 +82,7 @@ int main(int argc, char **argv) {
             break;
         } else if (std::strncmp(nb, "ERR NICK_ZAJETY\n", 16) == 0) {
             std::printf("Ten nick jest już zajęty, spróbuj inny.\n");
+            nick.clear();
             continue; // wróć na początek pętli i zapytaj ponownie
         } else {
             std::printf("Nieoczekiwana odpowiedź serwera przy ustawianiu nicku: %s", nb);
@@ -103,25 +115,25 @@ int main(int argc, char **argv) {
             rbuf[r] = '\0';
 
             if (std::strncmp(rbuf, "GLOSOWANIE_ZAKONCZONE", 21) == 0) {
-                std::printf("%s", rbuf);
+                std::printf("\n%s", rbuf);
                 std::printf("Głosowanie zostało zakończone przez serwer.\n");
                 ended = true;
                 break;
             } else {
                 // inne odpowiedzi (powitanie, OK, RESULT itp.)
-                std::printf("Odpowiedź: %s", rbuf);
+                std::printf("Serwer: %s", rbuf);
             }
         }
     });
 
     while (true) {
         if (ended.load()) break;
-        std::printf("Wybierz opcję (1-4), '0' cofnij głos, 'r' wyniki, 'q' wyjście: ");
+        std::printf("\nWybierz opcję (1-4), '0' cofnij głos, 'r' wyniki, 'q' wyjście: ");
         std::fflush(stdout);
         char line[32];
         if (!std::fgets(line, sizeof(line), stdin)) break;
 
-        if (line[0] == 'q') break;
+        if (line[0] == 'q' || line[0] == 'Q') break;
         std::string cmd;
         if (line[0] == 'r' || line[0] == 'R') {
             cmd = "RESULT\n";

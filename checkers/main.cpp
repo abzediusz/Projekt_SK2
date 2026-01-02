@@ -86,6 +86,31 @@ static bool trySend(int fd) {
         return true; 
     }
 }
+void zakoncz_gre()
+{
+    if(game.getWinner()==0)
+        {
+            cout<<"Wygrali biali"<<endl;
+            for(int cfd: clientFds)
+            {
+                //write(cfd,"WHITE WON\n",11);
+                queueSend(cfd, "WHITE WON\n");
+            }
+
+        }
+        if(game.getWinner()==1)
+        {
+            cout<<"Wygrali czarni"<<endl;
+            for(int cfd: clientFds)
+            {
+                //write(cfd,"BLACK WON\n",11);
+                queueSend(cfd, "BLACK WON\n");
+            }
+            
+        }
+        state="PREPARE";
+        spectators.clear();
+}
 bool czy_bije(Board board,string przed,string po,int color)
 {
     vector<string> white=board.getwhiteCoordinates();
@@ -136,6 +161,7 @@ bool czy_bije(Board board,string przed,string po,int color)
                 }
                 return false;
             }
+            
     }
     else
     {
@@ -184,7 +210,7 @@ bool czy_bije(Board board,string przed,string po,int color)
                 return false;
             }
     }
-    
+    return false;
 }
 static void errorExit(const char *msg) {
     perror(msg);
@@ -561,11 +587,11 @@ static void handle_command(int clientFd, const std::string &line,string &wynik) 
                         }
                     }
                 }
-                else
+                /*else
                 {
                     valid=0;
-                }
-                if(valid)
+                }*/
+                if(valid && game.getCurrentPlayer()==clientColors[clientFd])
                 {if(votes.find(vote)==votes.end())
                 {
                     votes[vote]=1;
@@ -649,22 +675,38 @@ static void handle_command(int clientFd, const std::string &line,string &wynik) 
         
     
 }
+int check()
+{
+    bool jest_bialy=0;
+    bool jest_czarny=0;
+    for(auto it=clientColors.begin();it!=clientColors.end();it++)
+    {
+        if(it->second==0)
+        {
+            jest_bialy=1;
+        }
+        else if(it->second==1)
+        {
+            jest_czarny=1;
+        }
+        if(jest_bialy && jest_czarny)
+        {
+            return -1;
+        }
+    }
+    if(jest_bialy && jest_czarny)
+        {
+            return -1;
+        }
+        if(jest_bialy)
+        {
+            return 0;
+        }
+        return 1;
+}
 int main(int argc,char** argv) {
     
-    //sf::RenderWindow window(sf::VideoMode({550,432}),"Checkers");
-    /*sf::Texture board,white_pawn,black_pawn;
-    sf::Sprite boardS;
-    sf::Sprite white_pawnS[12];
-    sf::Sprite black_pawnS[12];
-    board.loadFromFile("board.jpg");
-    white_pawn.loadFromFile("white_pawn.png");
-    black_pawn.loadFromFile("black_pawn.png");
-    boardS.setTexture(board);
-    for(int i=0;i<12;i++) {
-        white_pawnS[i].setTexture(white_pawn);
-        black_pawnS[i].setTexture(black_pawn);
-    }
-    white_pawnS[0].setTexture(white_pawn);*/
+    
     srand(time(nullptr));
     servFd = setup_server(argc, argv);
     signal(SIGINT, ctrl_c);
@@ -680,10 +722,7 @@ int main(int argc,char** argv) {
         Piece* newPawn=new Pawn(white[i],0);
         whitePieces.push_back(newPawn);
     }
-    /*for(int i=0;i<12;i++) {
-        Piece* newPiece = new Pawn(black[i],1);
-        pieces.push_back(newPiece);
-    }*/
+   
     for(int i=0;i<12;i++) {
         Piece* newPiece=new Pawn(black[i],1);
         blackPieces.push_back(newPiece);
@@ -698,7 +737,7 @@ int main(int argc,char** argv) {
         //sf::Event event;
         polls.resize(1);
         for (int fd : clientFds){
-            short events = POLLIN;
+            short events = POLLIN | POLLHUP;
             if (!sendBuffers[fd].empty()) {
                 events |= POLLOUT;
             }
@@ -719,6 +758,7 @@ int main(int argc,char** argv) {
             int cfd = accept(servFd, (sockaddr*)&addr, &alen);
             if (cfd < 0) { perror("accept"); continue; }
             clientFds.insert(cfd);
+            setnonblock(cfd);
             if(state=="PLAY")
             {
                 spectators[cfd]=0;
@@ -739,6 +779,50 @@ int main(int argc,char** argv) {
         
         for (size_t i = 1; i < polls.size(); ++i) {
             int cfd = polls[i].fd;
+            if(polls[i].revents & POLLHUP)
+            {
+                    auto itVote = clientChoice.find(cfd);
+                if (itVote != clientChoice.end()) {
+                    string v = itVote->second;
+                    if (v=="1" || (v[0]>='A' && v[0]<='H')) {
+                        ready_players--;
+                        auto itNameNick = clientNicks.find(cfd);
+                        const char *nm;
+                        if (itNameNick != clientNicks.end()) nm = itNameNick->second.c_str();
+                        else {
+                            auto itName = clientNames.find(cfd);
+                            nm = (itName != clientNames.end()) ? itName->second.c_str() : "?";
+                        }
+                        //std::printf("Klient %s rozłączył się %s\n", nm, v);
+                        cout<<"Klient "<<nm<<" rozłączył się\n";
+                    }
+                    if((v[0]>='A' && v[0]<='H'))
+                    {
+                        votes[v]--;
+                    }
+                    clientChoice.erase(itVote);
+                }
+                if(spectators.find(cfd)!=spectators.end())
+                {
+                    spectators.erase(cfd);
+                }
+                
+                clientFds.erase(cfd);
+                buffers.erase(cfd);
+                clientColors.erase(cfd);
+                clientNames.erase(cfd);
+                clientNicks.erase(cfd);
+                sendBuffers.erase(cfd);
+                shutdown(cfd,SHUT_RDWR);
+                close(cfd);
+                if(check()!=-1)
+                {
+                    game.setWinner(check());
+                    game.setGameOver(1);
+                    zakoncz_gre();
+                }
+                continue;
+            }
             if (polls[i].revents & POLLOUT) {
                 trySend(cfd);
             }
@@ -751,7 +835,7 @@ int main(int argc,char** argv) {
                 auto itVote = clientChoice.find(cfd);
                 if (itVote != clientChoice.end()) {
                     string v = itVote->second;
-                    if (v=="1") {
+                    if (v=="1" || (v[0]>='A' && v[0]<='H')) {
                         ready_players--;
                         auto itNameNick = clientNicks.find(cfd);
                         const char *nm;
@@ -763,17 +847,30 @@ int main(int argc,char** argv) {
                         //std::printf("Klient %s rozłączył się %s\n", nm, v);
                         cout<<"Klient "<<nm<<" rozłączył się\n";
                     }
+                    if((v[0]>='A' && v[0]<='H'))
+                    {
+                        votes[v]--;
+                    }
                     clientChoice.erase(itVote);
                 }
                 if(spectators.find(cfd)!=spectators.end())
                 {
                     spectators.erase(cfd);
                 }
+                
                 clientFds.erase(cfd);
                 buffers.erase(cfd);
+                clientColors.erase(cfd);
                 clientNames.erase(cfd);
                 clientNicks.erase(cfd);
                 sendBuffers.erase(cfd);
+                if(check()!=-1)
+                {
+                    game.setWinner(check());
+                    game.setGameOver(1);
+                    zakoncz_gre();
+                }
+                shutdown(cfd,SHUT_RDWR);
                 close(cfd);
                 continue;
             }
@@ -807,8 +904,9 @@ int main(int argc,char** argv) {
             
         }
     }
+    
     }
-    if(state=="PLAY" && wynik=="XX")
+    if(state=="PLAY" && wynik=="XX" && !game.getGameOver())
     {
         auto teraz = Clock::now();
             auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(teraz - start1);
@@ -1087,28 +1185,7 @@ int main(int argc,char** argv) {
     board.setupBoard(white,black);
     if(game.getGameOver())
     {
-        if(game.getWinner()==0)
-        {
-            cout<<"Wygrali biali"<<endl;
-            for(int cfd: clientFds)
-            {
-                //write(cfd,"WHITE WON\n",11);
-                queueSend(cfd, "WHITE WON\n");
-            }
-
-        }
-        if(game.getWinner()==1)
-        {
-            cout<<"Wygrali czarni"<<endl;
-            for(int cfd: clientFds)
-            {
-                //write(cfd,"BLACK WON\n",11);
-                queueSend(cfd, "BLACK WON\n");
-            }
-            
-        }
-        state="PREPARE";
-        spectators.clear();
+        zakoncz_gre();
     }     
     }
         /*for(int i=0;i<polls.size();i++)
@@ -1119,7 +1196,51 @@ int main(int argc,char** argv) {
         }*/
     for(int fd : clientFds) {
             if(!sendBuffers[fd].empty()) {
-                trySend(fd);
+                bool correct=trySend(fd);
+                if(!correct)
+                {
+                    auto itVote = clientChoice.find(fd);
+                if (itVote != clientChoice.end()) {
+                    string v = itVote->second;
+                    if (v=="1" || (v[0]>='A' && v[0]<='H')) {
+                        ready_players--;
+                        auto itNameNick = clientNicks.find(fd);
+                        const char *nm;
+                        if (itNameNick != clientNicks.end()) nm = itNameNick->second.c_str();
+                        else {
+                            auto itName = clientNames.find(fd);
+                            nm = (itName != clientNames.end()) ? itName->second.c_str() : "?";
+                        }
+                        //std::printf("Klient %s rozłączył się %s\n", nm, v);
+                        cout<<"Klient "<<nm<<" rozłączył się\n";
+                    }
+                    if((v[0]>='A' && v[0]<='H'))
+                    {
+                        votes[v]--;
+                    }
+                    clientChoice.erase(itVote);
+                }
+                if(spectators.find(fd)!=spectators.end())
+                {
+                    spectators.erase(fd);
+                }
+                
+                clientFds.erase(fd);
+                buffers.erase(fd);
+                clientColors.erase(fd);
+                clientNames.erase(fd);
+                clientNicks.erase(fd);
+                sendBuffers.erase(fd);
+                if(check()!=-1)
+                {
+                    game.setWinner(check());
+                    game.setGameOver(1);
+                    zakoncz_gre();
+                }
+                shutdown(fd,SHUT_RDWR);
+                close(fd);
+                
+                }
             }
         }
 }

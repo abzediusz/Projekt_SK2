@@ -63,10 +63,6 @@ static std::unordered_map<int, string> clientChoice;        // fd -> aktualny g≈
 static std::unordered_map<int, std::string> clientNicks;
 static std::unordered_map<int, vector<char>> sendBuffers;
 Clock::time_point start1;
-void setnonblock(int fd) {
-int flags = fcntl(fd, F_GETFL, 0);
-fcntl(fd, F_SETFL, flags | O_NONBLOCK);
-}
 static void queueSend(int fd, const char* data, size_t len) {
     auto& buf = sendBuffers[fd];
     buf.insert(buf.end(), data, data + len);
@@ -75,6 +71,70 @@ static void queueSend(int fd, const char* data, size_t len) {
 static void queueSend(int fd, const string& msg) {
     queueSend(fd, msg.c_str(), msg.size());
 }
+void broadcastPlayers()
+{
+    string header="";
+    header="PLAYERS-"+to_string(clientFds.size())+to_string(ready_players)+"\n";
+    string player_list="PLAYERLIST-";
+    string nick,color,ready;
+    for(auto i=clientFds.begin();i!=clientFds.end();i++)
+    {
+        if(clientNicks.find(*i)==clientNicks.end())
+        {
+            nick="guest";
+        }
+        else
+        {
+            nick=clientNicks[*i];
+        }
+        if(clientColors.find(*i)==clientColors.end())
+        {
+            color="observer";
+        }
+        else
+        {
+            color=to_string(clientColors[*i]);
+        }
+        if((clientChoice.find(*i)!=clientChoice.end() && clientChoice[*i]=="1") || (state=="PLAY" && (spectators.find(*i)!=spectators.end() || clientColors.find(*i)!=clientColors.end())))
+        {
+            ready="1";
+        }
+        else
+        {
+            ready="0";
+        }
+        if(player_list!="")
+        {
+            player_list=player_list+";";
+        }
+        player_list=player_list+nick+":"+color+":"+ready;
+    }
+    player_list=player_list+"\n";
+    for(int fd: clientFds)
+    {
+        queueSend(fd,player_list);
+    }
+}
+void broadcastLog()
+{
+    string result="";
+        for(auto it=Log.begin();it!=Log.end();it++)
+        {
+            if(result!="")
+            {
+                result=result+";";
+            }
+            result=result+it->color+":"+it->nick+":"+it->move;
+        }
+        result=result+"\n";
+        for(int fd: clientFds)
+        queueSend(fd, result);
+}
+void setnonblock(int fd) {
+int flags = fcntl(fd, F_GETFL, 0);
+fcntl(fd, F_SETFL, flags | O_NONBLOCK);
+}
+
 static bool trySend(int fd) {
     auto it=sendBuffers.find(fd);
     if (it==sendBuffers.end() || it->second.empty()) {
@@ -737,65 +797,7 @@ static void handle_command(int clientFd, const std::string &line,string &wynik) 
         
     
 }
-void broadcastPlayers()
-{
-    string header="";
-    header="PLAYERS-"+to_string(clientFds.size())+to_string(ready_players)+"\n";
-    string player_list="PLAYERLIST-";
-    string nick,color,ready;
-    for(auto i=clientFds.begin();i!=clientFds.end();i++)
-    {
-        if(clientNicks.find(*i)==clientNicks.end())
-        {
-            nick="guest";
-        }
-        else
-        {
-            nick=clientNicks[*i];
-        }
-        if(clientColors.find(*i)==clientColors.end())
-        {
-            color="observer";
-        }
-        else
-        {
-            color=to_string(clientColors[*i]);
-        }
-        if((clientChoice.find(*i)!=clientChoice.end() && clientChoice[*i]=="1") || (state=="PLAY" && (spectators.find(*i)!=spectators.end() || clientColors.find(*i)!=clientColors.end())))
-        {
-            ready="1";
-        }
-        else
-        {
-            ready="0";
-        }
-        if(player_list!="")
-        {
-            player_list=player_list+";";
-        }
-        player_list=player_list+nick+":"+color+":"+ready;
-    }
-    player_list=player_list+"\n";
-    for(int fd: clientFds)
-    {
-        queueSend(fd,player_list);
-    }
-}
-void broadcastLog()
-{
-    string result="";
-        for(auto it=Log.begin();it!=Log.end();it++)
-        {
-            if(result!="")
-            {
-                result=result+";";
-            }
-            result=result+it->color+":"+it->nick+":"+it->move;
-        }
-        result=result+"\n";
-        for(int fd: clientFds)
-        queueSend(fd, result);
-}
+
 int check()
 {
     bool jest_bialy=0;

@@ -132,10 +132,10 @@ void GameBoardWindow::updateBoard(const QStringList &white, const QStringList &b
     }
     
     // Draw white pieces
-    for (const QString &piece : white) {
-        // piece format: "e2" or "Ke8"
+    for (const QString &pieceOrig : white) {
+        QString piece = pieceOrig.toUpper();
         QString cell = piece.right(2);
-        int col = cell[0].toLatin1() - 'a';
+        int col = cell[0].toLatin1() - 'A';
         int row = 8 - cell[1].digitValue();
         
         if (row >= 0 && row < 8 && col >= 0 && col < 8) {
@@ -148,9 +148,10 @@ void GameBoardWindow::updateBoard(const QStringList &white, const QStringList &b
     }
     
     // Draw black pieces
-    for (const QString &piece : black) {
+    for (const QString &pieceOrig : black) {
+        QString piece = pieceOrig.toUpper();
         QString cell = piece.right(2);
-        int col = cell[0].toLatin1() - 'a';
+        int col = cell[0].toLatin1() - 'A';
         int row = 8 - cell[1].digitValue();
         
         if (row >= 0 && row < 8 && col >= 0 && col < 8) {
@@ -209,7 +210,7 @@ void GameBoardWindow::onCellClicked()
                         selectedFrom.clear();
                     } else {
                         // Send vote - czekamy na potwierdzenie z serwera
-                        QString move = QString("m-%1-%2").arg(selectedFrom, cell);
+                        QString move = QString("m-%1-%2").arg(selectedFrom.toUpper(), cell.toUpper());
                         network->sendMoveVote(move);
                         
                         // Clear selection
@@ -244,7 +245,7 @@ void GameBoardWindow::onInvalidMove()
 
 QString GameBoardWindow::coordToCell(int row, int col) const
 {
-    QChar letter = QChar('a' + col);
+    QChar letter = QChar('A' + col);
     int number = 8 - row;
     return QString("%1%2").arg(letter).arg(number);
 }

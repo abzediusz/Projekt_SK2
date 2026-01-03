@@ -48,6 +48,7 @@ void NetworkManager::setRole(int roleIndex)
     playerColor = role;
     
     QString msg = QString("ROLE %1\n").arg(role);
+    qDebug() << "WYSYŁAM:" << msg;
     if (socket) socket->write(msg.toUtf8());
 }
 

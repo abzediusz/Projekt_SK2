@@ -38,7 +38,7 @@ LobbyWindow::LobbyWindow(NetworkManager *net, QWidget *parent)
     roleCombo->addItem("Obserwator");
     roleCombo->addItem("Białe");
     roleCombo->addItem("Czarne");
-    roleCombo->setCurrentIndex(1);  // Default: white
+    roleCombo->setCurrentIndex(0); 
     layout->addWidget(roleCombo);
     
     // Players info
@@ -132,6 +132,9 @@ LobbyWindow::LobbyWindow(NetworkManager *net, QWidget *parent)
     connect(network, &NetworkManager::playerListUpdate, this, &LobbyWindow::onPlayerListUpdate);
     connect(network, &NetworkManager::countdownStarted, this, &LobbyWindow::onCountdownStarted);
     connect(network, &NetworkManager::gameStarting, this, &LobbyWindow::onGameStarting);
+
+    // Ensure the initial role is sent to the server
+    onRoleChanged(roleCombo->currentIndex());
 }
 
 void LobbyWindow::onRoleChanged(int index)

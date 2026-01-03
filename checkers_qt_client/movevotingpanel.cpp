@@ -185,10 +185,10 @@ QString MoveVotingPanel::formatMove(const QString &move) const
     if (move.startsWith("m-")) {
         QStringList parts = move.mid(2).split('-');
         if (parts.size() == 2) {
-            return QString("%1 → %2").arg(parts[0], parts[1]);
+            return QString("%1 → %2").arg(parts[0].toUpper(), parts[1].toUpper());
         }
     }
-    return move;
+    return move.toUpper();
 }
 
 void MoveVotingPanel::onCancelVote()

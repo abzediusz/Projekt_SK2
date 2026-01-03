@@ -93,7 +93,9 @@ void broadcastPlayers()
         }
         else
         {
-            color=to_string(clientColors[*i]);
+            if (clientColors[*i] == 1) color = "white";
+            else if (clientColors[*i] == 2) color = "black";
+            else color = "observer";
         }
         if((clientChoice.find(*i)!=clientChoice.end() && clientChoice[*i]=="1") || (state=="PLAY" && (spectators.find(*i)!=spectators.end() || clientColors.find(*i)!=clientColors.end())))
         {
@@ -110,6 +112,7 @@ void broadcastPlayers()
         player_list=player_list+nick+":"+color+":"+ready;
     }
     player_list=player_list+"\n";
+    std::printf("[DEBUG] PLAYERLIST wysyłany do klientów: %s\n", player_list.c_str());
     for(int fd: clientFds)
     {
         queueSend(fd,player_list);
@@ -369,7 +372,7 @@ static int setup_server(int argc, char **argv) {
     int one = 1;
     setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &one, sizeof(one));
 
-    if (bind(fd, res->ai_addr, res->ai_addrlen) < 0) errorExit("bind");
+    if (::bind(fd, res->ai_addr, res->ai_addrlen) < 0) errorExit("bind");
     if (listen(fd, 8) < 0) errorExit("listen");
     setnonblock(fd);
     freeaddrinfo(res);
@@ -408,6 +411,7 @@ static void handle_command_prepare(int clientFd, const std::string &line) {
                 int num = (start + offset) % 1000;
                 char tmp[16];
                 std::snprintf(tmp, sizeof(tmp), "anonim%03d", num);
+           broadcastPlayers();
                 std::string cand(tmp);
                 bool used = false;
                 for (const auto &entry : clientNicks) {
@@ -476,15 +480,17 @@ static void handle_command_prepare(int clientFd, const std::string &line) {
                 queueSend(clientFd, "OK\n");
         }
         else if (line.rfind("ROLE ", 0) == 0) {
-       
-           
-                int c=atoi(line.c_str()+5);
-                clientColors[clientFd]=c;
-                std::printf("Klient %s wybrał kolor %d\n", name,c);
-            
-            /*const char ok[] = "OK\n";
-            send(clientFd, ok, sizeof(ok)-1, 0);*/
+            std::string colorStr = line.substr(5);
+            // Usuń białe znaki z końca
+            colorStr.erase(colorStr.find_last_not_of(" \n\r\t")+1);
+            int c = 0;
+            if (colorStr == "white") c = 1;
+            else if (colorStr == "black") c = 2;
+            else c = 0; // observer lub nieznane
+            clientColors[clientFd]=c;
+            std::printf("Klient %s wybrał kolor %d (%s)\n", name, c, colorStr.c_str());
             queueSend(clientFd, "OK\n");
+            broadcastPlayers();
         } 
      else if (line == "RESULT" || line == "RESULT\n") {
         char buf[128];

@@ -21,5 +21,4 @@ private:
     QPushButton *connectButton;
     QLabel *statusLabel;
     NetworkManager *network;
-    bool gameInProgress;
 };

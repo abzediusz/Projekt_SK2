@@ -10,7 +10,7 @@
 #include <QTimer>
 
 LoginWindow::LoginWindow(QWidget *parent)
-    : QWidget(parent), network(nullptr), gameInProgress(false)
+    : QWidget(parent), network(nullptr)
 {
     setWindowTitle("Warcaby - Logowanie");
     setGeometry(100, 100, 400, 350);
@@ -91,13 +91,6 @@ void LoginWindow::onConnectClicked()
     
     network = new NetworkManager(this);
     
-    // Podłącz się do gameStarting PRZED innymi sygnałami
-    connect(network, &NetworkManager::gameStarting, this, [this]() {
-        gameInProgress = true;
-        statusLabel->setText("Gra w trakcie - dołączanie jako obserwator...");
-        statusLabel->setStyleSheet("color: orange;");
-    });
-    
     // Login sequence
     connect(network, &NetworkManager::connectionSuccess, this, [this, nick]() {
         statusLabel->setText("Połączono, wysyłam nick...");
@@ -105,26 +98,27 @@ void LoginWindow::onConnectClicked()
     });
     
     connect(network, &NetworkManager::nickSet, this, [this]() {
-        // Czekamy chwilę na ewentualne PLAY (jeśli gra w trakcie)
-        QTimer::singleShot(200, this, [this]() {
-            if (gameInProgress) {
-                // Gra już trwa - dołącz jako obserwator
-                network->setRole(0);  // observer
-                QTimer::singleShot(100, this, [this]() {
-                    network->joinGame();
-                    GameBoardWindow *game = new GameBoardWindow(network);
-                    game->show();
-                    this->hide();
-                });
-            } else {
-                // Normalne lobby
-                statusLabel->setText("Otwieranie lobby...");
-                statusLabel->setStyleSheet("color: green;");
-                LobbyWindow *lobby = new LobbyWindow(network);
-                lobby->show();
-                this->hide();
-            }
-        });
+        statusLabel->setText("Sprawdzanie stanu gry...");
+        // Wysyłamy JOIN od razu - serwer odpowie Dołączono lub SPECTATE
+        network->joinGame();
+    });
+    
+    // Odpowiedź od serwera gdy gra NIE trwa - idź do lobby
+    connect(network, &NetworkManager::teamColorSet, this, [this](const QString &) {
+        statusLabel->setText("Otwieranie lobby...");
+        statusLabel->setStyleSheet("color: green;");
+        LobbyWindow *lobby = new LobbyWindow(network);
+        lobby->show();
+        this->hide();
+    });
+    
+    // Odpowiedź od serwera gdy gra TRWA - idź bezpośrednio do gry jako obserwator
+    connect(network, &NetworkManager::spectatorJoinedDuringGame, this, [this]() {
+        statusLabel->setText("Gra w trakcie - dołączam jako obserwator...");
+        statusLabel->setStyleSheet("color: orange;");
+        GameBoardWindow *game = new GameBoardWindow(network);
+        game->show();
+        this->hide();
     });
     
     connect(network, &NetworkManager::nickTaken, this, [this](const QString &nick) {

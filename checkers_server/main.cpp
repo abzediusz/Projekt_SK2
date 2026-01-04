@@ -534,7 +534,8 @@ static void handle_command_prepare(int clientFd, const std::string &line) {
         //send(clientFd, err, sizeof(err)-1, 0);
         queueSend(clientFd, "ERR\n");
     }
-        if (ready_players==clientFds.size()) {
+        // Sprawdź start gry tylko gdy gra jeszcze nie trwa
+        if (ready_players==clientFds.size() && state != "PLAY") {
             // Policz ilu graczy jest w każdym kolorze
             int white_count = 0;
             int black_count = 0;

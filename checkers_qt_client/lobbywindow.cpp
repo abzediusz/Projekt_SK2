@@ -132,6 +132,7 @@ LobbyWindow::LobbyWindow(NetworkManager *net, QWidget *parent)
     connect(network, &NetworkManager::playerListUpdate, this, &LobbyWindow::onPlayerListUpdate);
     connect(network, &NetworkManager::countdownStarted, this, &LobbyWindow::onCountdownStarted);
     connect(network, &NetworkManager::gameStarting, this, &LobbyWindow::onGameStarting);
+    connect(network, &NetworkManager::spectatorJoinedDuringGame, this, &LobbyWindow::onSpectatorJoinedDuringGame);
 
     // Ensure the initial role is sent to the server
     onRoleChanged(roleCombo->currentIndex());
@@ -230,7 +231,14 @@ void LobbyWindow::updateCountdown()
 
 void LobbyWindow::onGameStarting()
 {
+    // Zabezpieczenie przed otwieraniem wielu okien
+    if (network->isGameInProgress()) {
+        qDebug() << "Game already in progress, ignoring PLAY signal";
+        return;
+    }
+    
     countdownTimer->stop();
+    network->setGameInProgress(true);
     
     // Jeśli gracz nie wybrał roli (gra zaczęła się w trakcie logowania),
     // automatycznie dołącz jako obserwator
@@ -250,6 +258,7 @@ void LobbyWindow::onGameStarting()
     // Connect return to lobby signal
     connect(game, &GameBoardWindow::returnToLobby, this, [this, game]() {
         // Create new lobby window
+        network->setGameInProgress(false);
         LobbyWindow *lobby = new LobbyWindow(network);
         lobby->show();
         game->deleteLater();
@@ -257,4 +266,25 @@ void LobbyWindow::onGameStarting()
     
     game->show();
     this->hide();  // Hide instead of delete to keep network alive
+}
+
+void LobbyWindow::onSpectatorJoinedDuringGame()
+{
+    qDebug() << "Spectator joined during active game - opening game window";
+    
+    // Klient dołączył jako obserwator w trakcie gry
+    // Otwórz okno gry bez możliwości wyboru roli
+    GameBoardWindow *game = new GameBoardWindow(network);
+    
+    // Connect return to lobby signal
+    connect(game, &GameBoardWindow::returnToLobby, this, [this, game]() {
+        // Create new lobby window
+        network->setGameInProgress(false);
+        LobbyWindow *lobby = new LobbyWindow(network);
+        lobby->show();
+        game->deleteLater();
+    });
+    
+    game->show();
+    this->hide();
 }

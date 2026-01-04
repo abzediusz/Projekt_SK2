@@ -40,6 +40,8 @@ public:
     // Gettery
     QString getNick() const { return currentNick; }
     QString getTeamColor() const { return playerColor; }
+    bool isGameInProgress() const { return gameInProgress; }
+    void setGameInProgress(bool inProgress) { gameInProgress = inProgress; }
     
 signals:
     // Logowanie
@@ -57,6 +59,7 @@ signals:
     void playerListUpdate(const QList<PlayerInfo> &players);
     void countdownStarted();
     void gameStarting();
+    void spectatorJoinedDuringGame();  // When joining as spectator during active game
     void invalidMoveError();
     void gameEnded(const QString &winner);  // "white" or "black"
     
@@ -74,4 +77,5 @@ private:
     QString playerColor = "white";
     int loginStep = 0;  // 0: waiting NICK OK, 1: waiting ROLE OK, 2: waiting JOIN OK, 3: in game
     bool awaitingMoveResponse = false;  // True when waiting for server response to VOTE
+    bool gameInProgress = false;  // True when game is active
 };

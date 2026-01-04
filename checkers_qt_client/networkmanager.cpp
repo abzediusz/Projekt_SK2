@@ -152,6 +152,17 @@ void NetworkManager::processMessage(const QString &msg)
         return;
     }
     
+    // Joined as spectator during active game
+    if (msg.startsWith("SPECTATE")) {
+        qDebug() << "  → Joined as spectator during game";
+        playerColor = "observer";
+        loginStep = 3;
+        gameInProgress = true;  // Gra już trwa
+        emit spectatorJoinedDuringGame();
+        requestMoveLogs();
+        return;
+    }
+    
     // Board: BOARD-e2,d3,Ke8|a7,b6
     if (msg.startsWith("BOARD-")) {
         QString boardState = msg.mid(6).trimmed();

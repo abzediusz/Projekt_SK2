@@ -21,6 +21,7 @@ private slots:
     void onPlayerListUpdate(const QList<PlayerInfo> &players);
     void onCountdownStarted();
     void onGameStarting();
+    void onSpectatorJoinedDuringGame();
     void updateCountdown();
     
 private:

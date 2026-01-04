@@ -8,6 +8,7 @@ class QGridLayout;
 class QVBoxLayout;
 class MoveVotingPanel;
 class QPushButton;
+class QLabel;
 
 class GameBoardWindow : public QWidget {
     Q_OBJECT
@@ -17,14 +18,22 @@ public:
 public slots:
     void updateBoard(const QStringList &white, const QStringList &black);
     
+signals:
+    void returnToLobby();
+    
 private slots:
     void onTeamColorSet(const QString &color);
     void onCellClicked();
     void onInvalidMove();
+    void onGameEnded(const QString &winner);
+    void onReturnToLobby();
+    void onExitGame();
     
 private:
     NetworkManager *network;
     MoveVotingPanel *moveVotingPanel;
+    QLabel *errorLabel;
+    QWidget *gameEndOverlay;
     QString playerColor = "white";
     QString selectedFrom;
     QStringList whitePieces, blackPieces;

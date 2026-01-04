@@ -44,6 +44,7 @@ public:
 signals:
     // Logowanie
     void nickSet();
+    void nickTaken(const QString &nick);
     void roleAcknowledged();
     void connectionSuccess();
     void connectionError(const QString &error);
@@ -57,6 +58,7 @@ signals:
     void countdownStarted();
     void gameStarting();
     void invalidMoveError();
+    void gameEnded(const QString &winner);  // "white" or "black"
     
 private slots:
     void onConnected();
@@ -71,4 +73,5 @@ private:
     QString currentNick;
     QString playerColor = "white";
     int loginStep = 0;  // 0: waiting NICK OK, 1: waiting ROLE OK, 2: waiting JOIN OK, 3: in game
+    bool awaitingMoveResponse = false;  // True when waiting for server response to VOTE
 };

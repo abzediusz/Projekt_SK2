@@ -74,9 +74,10 @@ static void queueSend(int fd, const string& msg) {
 void broadcastPlayers()
 {
     string header="";
-    header="PLAYERS-"+to_string(clientFds.size())+to_string(ready_players)+"\n";
+    header="PLAYERS-"+to_string(clientFds.size())+"-"+to_string(ready_players)+"\n";
     string player_list="PLAYERLIST-";
     string nick,color,ready;
+    bool first = true;
     for(auto i=clientFds.begin();i!=clientFds.end();i++)
     {
         if(clientNicks.find(*i)==clientNicks.end())
@@ -93,8 +94,8 @@ void broadcastPlayers()
         }
         else
         {
-            if (clientColors[*i] == 1) color = "white";
-            else if (clientColors[*i] == 2) color = "black";
+            if (clientColors[*i] == 0) color = "white";
+            else if (clientColors[*i] == 1) color = "black";
             else color = "observer";
         }
         if((clientChoice.find(*i)!=clientChoice.end() && clientChoice[*i]=="1") || (state=="PLAY" && (spectators.find(*i)!=spectators.end() || clientColors.find(*i)!=clientColors.end())))
@@ -105,25 +106,28 @@ void broadcastPlayers()
         {
             ready="0";
         }
-        if(player_list!="")
+        if(!first)
         {
             player_list=player_list+";";
         }
+        first = false;
         player_list=player_list+nick+":"+color+":"+ready;
     }
     player_list=player_list+"\n";
     std::printf("[DEBUG] PLAYERLIST wysyłany do klientów: %s\n", player_list.c_str());
+    std::printf("[DEBUG] PLAYERS header: %s\n", header.c_str());
     for(int fd: clientFds)
     {
-        queueSend(fd,player_list);
+        queueSend(fd, header);
+        queueSend(fd, player_list);
     }
 }
 void broadcastLog()
 {
-    string result="";
+    string result="MOVELOGS ";
         for(auto it=Log.begin();it!=Log.end();it++)
         {
-            if(result!="")
+            if(result!="MOVELOGS ")
             {
                 result=result+";";
             }
@@ -411,7 +415,6 @@ static void handle_command_prepare(int clientFd, const std::string &line) {
                 int num = (start + offset) % 1000;
                 char tmp[16];
                 std::snprintf(tmp, sizeof(tmp), "anonim%03d", num);
-           broadcastPlayers();
                 std::string cand(tmp);
                 bool used = false;
                 for (const auto &entry : clientNicks) {
@@ -441,6 +444,7 @@ static void handle_command_prepare(int clientFd, const std::string &line) {
             /*const char ok[] = "OK\n";
             send(clientFd, ok, sizeof(ok)-1, 0);*/
             queueSend(clientFd, "OK\n");
+            broadcastPlayers();
         }
     } else if (line.rfind("JOIN", 0) == 0) {
         // Klient zgłasza chęć dołączenia do gry po ustawieniu nicku
@@ -483,14 +487,33 @@ static void handle_command_prepare(int clientFd, const std::string &line) {
             std::string colorStr = line.substr(5);
             // Usuń białe znaki z końca
             colorStr.erase(colorStr.find_last_not_of(" \n\r\t")+1);
-            int c = 0;
-            if (colorStr == "white") c = 1;
-            else if (colorStr == "black") c = 2;
-            else c = 0; // observer lub nieznane
-            clientColors[clientFd]=c;
-            std::printf("Klient %s wybrał kolor %d (%s)\n", name, c, colorStr.c_str());
-            queueSend(clientFd, "OK\n");
-            broadcastPlayers();
+            
+            // Podczas gry nie można zmienić roli z obserwatora na gracza
+            if (state == "PLAY" && spectators.find(clientFd) != spectators.end()) {
+                // Gracz jest spectatorem w trakcie gry - nie może zmienić roli
+                std::printf("Klient %s próbuje zmienić rolę podczas gry - zablokowane\n", name);
+                queueSend(clientFd, "OK\n");
+                broadcastPlayers();
+            } else {
+                // Mapowanie: 0=white, 1=black, -1=observer (zgodne z game.getCurrentPlayer())
+                int c = -1;
+                if (colorStr == "white") c = 0;
+                else if (colorStr == "black") c = 1;
+                else c = -1; // observer
+                
+                if (c == -1) {
+                    // Observer - usuń z clientColors i dodaj do spectators
+                    clientColors.erase(clientFd);
+                    spectators[clientFd] = 0;
+                } else {
+                    // Gracz - ustaw kolor i usuń ze spectators
+                    clientColors[clientFd] = c;
+                    spectators.erase(clientFd);
+                }
+                std::printf("Klient %s wybrał kolor %d (%s)\n", name, c, colorStr.c_str());
+                queueSend(clientFd, "OK\n");
+                broadcastPlayers();
+            }
         } 
      else if (line == "RESULT" || line == "RESULT\n") {
         char buf[128];
@@ -504,45 +527,37 @@ static void handle_command_prepare(int clientFd, const std::string &line) {
         queueSend(clientFd, "ERR\n");
     }
         if (ready_players==clientFds.size()) {
-            // jedna wygrywająca opcja
-            if(clientColors.size()!=clientFds.size())
-            {
-                srand(time(0));
-                for(int i: clientFds)
-                {
-                    if(clientColors.find(i)==clientColors.end())
-                    {
-                        clientColors[i]=rand()%2;
-                    }
-
-                }
-            }
-            int suma=0;
+            // Policz ilu graczy jest w każdym kolorze
+            int white_count = 0;
+            int black_count = 0;
             for(auto it=clientColors.begin();it!=clientColors.end();it++)
             {
-                suma+=it->second;
+                if(it->second == 0) white_count++;
+                else if(it->second == 1) black_count++;
             }
-            if(suma==0)
-            {
-                clientColors[*(next(clientFds.begin(),rand()%clientFds.size()))]=1;
-            }
-            else if(suma==ready_players)
-            {
-                clientColors[*(next(clientFds.begin(),rand()%clientFds.size()))]=0;
-            }
-            char buf[100];
-            std::snprintf(buf, sizeof(buf),"PLAY\n");
-            state="PLAY";
-            std::string msg(buf);
-        std::printf("[ADMIN] Zakończenie głosowania, wynik: %s", buf);
-            for (int fd : clientFds) {
-            //send(fd, msg.c_str(), msg.size(), 0);
-            queueSend(fd, "PLAY\n");
-            }
-            wyswietl(-1);
             
-        clientChoice.clear();
-
+            std::printf("[DEBUG] Start gry: white_count=%d, black_count=%d\n", white_count, black_count);
+            
+            // Sprawdź czy mamy graczy w obu kolorach
+            if(white_count == 0 || black_count == 0) {
+                // Brak graczy w obu kolorach - nie startuj gry
+                std::printf("[DEBUG] Nie można rozpocząć gry - brak graczy w obu kolorach\n");
+                for(int fd : clientFds) {
+                    queueSend(fd, "ERR Potrzebny gracz w każdym kolorze\n");
+                }
+            } else {
+                char buf[100];
+                std::snprintf(buf, sizeof(buf),"PLAY\n");
+                state="PLAY";
+                std::string msg(buf);
+                std::printf("[ADMIN] Zakończenie głosowania, wynik: %s", buf);
+                for (int fd : clientFds) {
+                    queueSend(fd, "PLAY\n");
+                }
+                wyswietl(-1);
+                
+                clientChoice.clear();
+            }
         }
         
         
@@ -573,7 +588,7 @@ static void handle_command(int clientFd, const std::string &line,string &wynik) 
                     }
                     MoveLog log;
                 log.nick = clientNicks.find(clientFd)->second;
-                log.color = to_string(clientColors[clientFd]);
+                log.color = (clientColors[clientFd] == 0) ? "white" : "black";
                 log.move = "CANCELLED";
                 Log.push_back(log);
                 queueSend(clientFd,"OK\n");
@@ -585,6 +600,10 @@ static void handle_command(int clientFd, const std::string &line,string &wynik) 
     if (line.rfind("VOTE ", 0) == 0) //TRZEBA DODAC SPRAWDZANIE, CZY GRACZ JUZ NIE ZAGLOSOWAL!!!!
     {
         string linia=line.substr(5,7);
+        cout << "[DEBUG] VOTE received, linia='" << linia << "', clientFd=" << clientFd 
+             << ", isSpectator=" << (spectators.find(clientFd)!=spectators.end()) 
+             << ", clientColor=" << clientColors[clientFd] 
+             << ", currentPlayer=" << game.getCurrentPlayer() << endl;
         if (linia.rfind("m", 0) == 0 && spectators.find(clientFd)==spectators.end()) {
        string vote = linia.c_str() + 2;
        string skad=vote.substr(0,2);
@@ -720,7 +739,7 @@ static void handle_command(int clientFd, const std::string &line,string &wynik) 
                 //std::printf("Klient %s zagłosował na %s\n", name,vote);
                 MoveLog log;
                 log.nick = clientNicks.find(clientFd)->second;
-                log.color = to_string(clientColors[clientFd]);
+                log.color = (clientColors[clientFd] == 0) ? "white" : "black";
                 log.move = vote;
                 Log.push_back(log);
                 
@@ -732,6 +751,12 @@ static void handle_command(int clientFd, const std::string &line,string &wynik) 
             queueSend(clientFd, "OK\n");
             broadcastLog();
         }
+        else
+        {
+            // Invalid move - vote rejected
+            cout<<"[DEBUG] Invalid move rejected for client "<<clientFd<<endl;
+            queueSend(clientFd, "Invalid move\n");
+        }
         }
             else
             {
@@ -740,10 +765,10 @@ static void handle_command(int clientFd, const std::string &line,string &wynik) 
             }
         } 
      else if (line == "MOVELOGS" || line == "MOVELOGS\n") {
-        string result="";
+        string result="MOVELOGS ";
         for(auto it=Log.begin();it!=Log.end();it++)
         {
-            if(result!="")
+            if(result!="MOVELOGS ")
             {
                 result=result+";";
             }
@@ -780,6 +805,7 @@ static void handle_command(int clientFd, const std::string &line,string &wynik) 
                 game.setCurrentPlayer(1-game.getCurrentPlayer());
                 clientChoice.clear();
             votes.clear();
+            Log.clear();
                 return;
             }
             for (auto it = votes.begin(); it != votes.end(); ++it)
@@ -796,6 +822,7 @@ static void handle_command(int clientFd, const std::string &line,string &wynik) 
             
         clientChoice.clear();
             votes.clear();
+            Log.clear();
         }
         
         
@@ -1004,7 +1031,13 @@ int main(int argc,char** argv) {
                 close(cfd);
                 continue;
             }
-            if(state=="PREPARE" || (spectators.find(cfd)!=spectators.end() && spectators[cfd]==0))
+            // Allow login commands (NICK, ROLE, JOIN) for new clients even during PLAY
+            // or for spectators with spectators[cfd]==0
+            bool isNewClient = (clientNicks.find(cfd) == clientNicks.end());
+            bool isSpectatorNotReady = (spectators.find(cfd) != spectators.end() && spectators[cfd] == 0);
+            bool isSpectator = (spectators.find(cfd) != spectators.end());
+            
+            if(state=="PREPARE" || isNewClient || isSpectatorNotReady)
             {
                 buffers[cfd].append(buf, n);
             auto &acc = buffers[cfd];
@@ -1016,7 +1049,7 @@ int main(int argc,char** argv) {
                 handle_command_prepare(cfd, line);
             }
         }
-        else if(state=="PLAY")
+        else if(state=="PLAY" && !isSpectator)
         {
             
             

@@ -246,6 +246,15 @@ void LobbyWindow::onGameStarting()
     
     network->joinGame();
     GameBoardWindow *game = new GameBoardWindow(network);
+    
+    // Connect return to lobby signal
+    connect(game, &GameBoardWindow::returnToLobby, this, [this, game]() {
+        // Create new lobby window
+        LobbyWindow *lobby = new LobbyWindow(network);
+        lobby->show();
+        game->deleteLater();
+    });
+    
     game->show();
-    this->deleteLater();
+    this->hide();  // Hide instead of delete to keep network alive
 }

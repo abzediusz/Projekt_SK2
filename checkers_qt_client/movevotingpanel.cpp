@@ -62,7 +62,7 @@ MoveVotingPanel::MoveVotingPanel(NetworkManager *net, QWidget *parent)
     
     // Logs
     logList = new QListWidget();
-    logList->setStyleSheet("border: 1px solid #bdc3c7; border-radius: 4px; QScrollBar:vertical { background: white; width: 12px; } QScrollBar::handle:vertical { background: #bdc3c7; border-radius: 6px; } QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { background: none; }");
+    logList->setStyleSheet("QListWidget { border: 1px solid #bdc3c7; border-radius: 4px; }");
     logList->setMaximumHeight(150);
     layout->addWidget(logList);
     
@@ -72,6 +72,12 @@ MoveVotingPanel::MoveVotingPanel(NetworkManager *net, QWidget *parent)
     if (network) {
         connect(network, &NetworkManager::teamColorSet, this, &MoveVotingPanel::onTeamColorSet);
         connect(network, &NetworkManager::moveLogsReceived, this, &MoveVotingPanel::onMoveLogsReceived);
+        
+        // Initialize teamColor from NetworkManager
+        QString initialColor = network->getTeamColor();
+        if (!initialColor.isEmpty()) {
+            onTeamColorSet(initialColor);
+        }
     }
 }
 

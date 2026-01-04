@@ -9,12 +9,21 @@
 #include <QFont>
 #include <QDebug>
 #include <QMessageBox>
+#include <QTimer>
+#include <QApplication>
 
 GameBoardWindow::GameBoardWindow(NetworkManager *net, QWidget *parent)
     : QWidget(parent), network(net)
 {
     setWindowTitle("Warcaby - Gra");
     setFixedSize(790, 465);
+    
+    // Initialize player color from NetworkManager
+    playerColor = network->getTeamColor();
+    if (playerColor.isEmpty()) {
+        playerColor = "observer";
+    }
+    qDebug() << "GameBoardWindow initialized with playerColor:" << playerColor;
     
     QHBoxLayout *mainLayout = new QHBoxLayout(this);
     mainLayout->setSpacing(0);
@@ -36,6 +45,68 @@ GameBoardWindow::GameBoardWindow(NetworkManager *net, QWidget *parent)
     connect(network, &NetworkManager::boardUpdate, this, &GameBoardWindow::updateBoard);
     connect(network, &NetworkManager::teamColorSet, this, &GameBoardWindow::onTeamColorSet);
     connect(network, &NetworkManager::invalidMoveError, this, &GameBoardWindow::onInvalidMove);
+    connect(network, &NetworkManager::gameEnded, this, &GameBoardWindow::onGameEnded);
+    
+    // Error overlay label
+    errorLabel = new QLabel(this);
+    errorLabel->setText("NIEPRAWIDŁOWY RUCH!\nWybierz inny ruch.");
+    errorLabel->setAlignment(Qt::AlignCenter);
+    errorLabel->setStyleSheet(
+        "background-color: rgba(220, 53, 69, 0.95);"
+        "color: white;"
+        "font-size: 18pt;"
+        "font-weight: bold;"
+        "border-radius: 10px;"
+        "padding: 20px;"
+    );
+    errorLabel->setFixedSize(350, 100);
+    errorLabel->move((width() - errorLabel->width()) / 2, (height() - errorLabel->height()) / 2);
+    errorLabel->hide();
+    
+    // Game end overlay (hidden initially)
+    gameEndOverlay = new QWidget(this);
+    gameEndOverlay->setStyleSheet("background-color: rgba(0, 0, 0, 0.85);");
+    gameEndOverlay->setFixedSize(width(), height());
+    gameEndOverlay->move(0, 0);
+    gameEndOverlay->hide();
+    
+    QVBoxLayout *endLayout = new QVBoxLayout(gameEndOverlay);
+    endLayout->setAlignment(Qt::AlignCenter);
+    
+    QLabel *endTitle = new QLabel("KONIEC GRY", gameEndOverlay);
+    endTitle->setObjectName("endTitle");
+    endTitle->setAlignment(Qt::AlignCenter);
+    endTitle->setStyleSheet("color: white; font-size: 28pt; font-weight: bold;");
+    endLayout->addWidget(endTitle);
+    
+    QLabel *endResult = new QLabel("", gameEndOverlay);
+    endResult->setObjectName("endResult");
+    endResult->setAlignment(Qt::AlignCenter);
+    endResult->setStyleSheet("color: #ffc107; font-size: 22pt; font-weight: bold; margin: 20px;");
+    endLayout->addWidget(endResult);
+    
+    QHBoxLayout *buttonLayout = new QHBoxLayout();
+    buttonLayout->setSpacing(20);
+    
+    QPushButton *returnBtn = new QPushButton("Wróć do Lobby", gameEndOverlay);
+    returnBtn->setFixedSize(180, 50);
+    returnBtn->setStyleSheet(
+        "QPushButton { background-color: #28a745; color: white; font-size: 14pt; font-weight: bold; border-radius: 8px; }"
+        "QPushButton:hover { background-color: #218838; }"
+    );
+    connect(returnBtn, &QPushButton::clicked, this, &GameBoardWindow::onReturnToLobby);
+    buttonLayout->addWidget(returnBtn);
+    
+    QPushButton *exitBtn = new QPushButton("Wyjdź z Gry", gameEndOverlay);
+    exitBtn->setFixedSize(180, 50);
+    exitBtn->setStyleSheet(
+        "QPushButton { background-color: #dc3545; color: white; font-size: 14pt; font-weight: bold; border-radius: 8px; }"
+        "QPushButton:hover { background-color: #c82333; }"
+    );
+    connect(exitBtn, &QPushButton::clicked, this, &GameBoardWindow::onExitGame);
+    buttonLayout->addWidget(exitBtn);
+    
+    endLayout->addLayout(buttonLayout);
 }
 
 QWidget* GameBoardWindow::createBoardLayout()
@@ -237,10 +308,14 @@ void GameBoardWindow::onInvalidMove()
     selectedFrom.clear();
     updateBoard(whitePieces, blackPieces);
     
-    QMessageBox::critical(this, "Niepoprawny głos", 
-        "Twój głos został odrzucony przez serwer.\n"
-        "Ruch jest niepoprawny lub nie jest Twoja kolej.\n\n"
-        "Spróbuj ponownie.");
+    // Show error overlay
+    errorLabel->raise();
+    errorLabel->show();
+    
+    // Hide after 2 seconds
+    QTimer::singleShot(2000, this, [this]() {
+        errorLabel->hide();
+    });
 }
 
 QString GameBoardWindow::coordToCell(int row, int col) const
@@ -275,4 +350,53 @@ bool GameBoardWindow::isDama(const QString &cell) const
         if (p.startsWith("K") && p.endsWith(cell)) return true;
     }
     return false;
+}
+
+void GameBoardWindow::onGameEnded(const QString &winner)
+{
+    qDebug() << "Game ended! Winner:" << winner;
+    
+    // Update result label
+    QLabel *resultLabel = gameEndOverlay->findChild<QLabel*>("endResult");
+    if (resultLabel) {
+        QString winnerText;
+        QString resultColor;
+        
+        if (winner == "white") {
+            winnerText = "BIAŁE WYGRAŁY!";
+            resultColor = "#ffffff";
+        } else {
+            winnerText = "CZARNE WYGRAŁY!";
+            resultColor = "#333333";
+        }
+        
+        // Check if player won
+        if (playerColor == winner) {
+            winnerText += "\n GRATULACJE, WYGRAŁEŚ!";
+            resultColor = "#28a745";
+        } else if (playerColor != "observer" && playerColor != winner) {
+            winnerText += "\nNiestety, przegrałeś...";
+            resultColor = "#dc3545";
+        }
+        
+        resultLabel->setText(winnerText);
+        resultLabel->setStyleSheet(QString("color: %1; font-size: 22pt; font-weight: bold; margin: 20px;").arg(resultColor));
+    }
+    
+    // Show overlay
+    gameEndOverlay->raise();
+    gameEndOverlay->show();
+}
+
+void GameBoardWindow::onReturnToLobby()
+{
+    qDebug() << "Returning to lobby...";
+    gameEndOverlay->hide();
+    emit returnToLobby();
+}
+
+void GameBoardWindow::onExitGame()
+{
+    qDebug() << "Exiting game...";
+    qApp->quit();
 }

@@ -127,6 +127,19 @@ void LoginWindow::onConnectClicked()
         });
     });
     
+    connect(network, &NetworkManager::nickTaken, this, [this](const QString &nick) {
+        statusLabel->setText("Nick \"" + nick + "\" jest już zajęty! Wybierz inny.");
+        statusLabel->setStyleSheet("color: red; font-weight: bold;");
+        connectButton->setEnabled(true);
+        nickInput->setFocus();
+        nickInput->selectAll();
+        // Disconnect and delete network to allow reconnection
+        if (network) {
+            network->deleteLater();
+            network = nullptr;
+        }
+    });
+    
     connect(network, &NetworkManager::connectionError, this, [this](const QString &err) {
         statusLabel->setText("Błąd: " + err);
         statusLabel->setStyleSheet("color: red;");

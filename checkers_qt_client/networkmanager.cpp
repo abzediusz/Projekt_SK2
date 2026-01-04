@@ -69,7 +69,11 @@ void NetworkManager::setReady(bool ready)
 void NetworkManager::sendMoveVote(const QString &move)
 {
     QString cmd = QString("VOTE %1\n").arg(move);
-    if (socket) socket->write(cmd.toUtf8());
+    if (socket) {
+        qDebug() << "TX:" << cmd.trimmed() << "(awaitingMoveResponse = true)";
+        awaitingMoveResponse = true;
+        socket->write(cmd.toUtf8());
+    }
 }
 
 void NetworkManager::requestMoveLogs()
@@ -111,8 +115,22 @@ void NetworkManager::processMessage(const QString &msg)
 {
     qDebug() << "RX:" << msg;
     
+    // Nick taken error
+    if (msg == "ERR NICK_ZAJETY") {
+        qDebug() << "  → Nick is taken!";
+        emit nickTaken(currentNick);
+        return;
+    }
+    
     // Login: OK responses
     if (msg == "OK") {
+        // If we were waiting for move response, clear the flag
+        if (awaitingMoveResponse) {
+            qDebug() << "  → Move OK";
+            awaitingMoveResponse = false;
+            return;
+        }
+        
         if (loginStep == 0) {
             qDebug() << "  → NICK OK";
             loginStep = 1;
@@ -209,10 +227,25 @@ void NetworkManager::processMessage(const QString &msg)
         return;
     }
     
-    // Invalid move
-    if (msg == "ERROR" || msg.startsWith("ERROR")) {
-        qDebug() << "  → Invalid move!";
-        emit invalidMoveError();
+    // Game ended
+    if (msg == "WHITE WON" || msg == "BLACK WON") {
+        QString winner = msg.startsWith("WHITE") ? "white" : "black";
+        qDebug() << "  → Game ended! Winner:" << winner;
+        emit gameEnded(winner);
+        return;
+    }
+    
+    // Invalid move - server sends "ERR" for invalid game moves
+    // But not "ERR NICK_ZAJETY" which is handled earlier
+    // Only show error if we were waiting for a move response
+    if (msg == "ERR" || msg == "ERROR" || msg == "Invalid move") {
+        if (awaitingMoveResponse) {
+            qDebug() << "  → Invalid move!";
+            awaitingMoveResponse = false;
+            emit invalidMoveError();
+        } else {
+            qDebug() << "  → ERR received (not a move error, ignoring)";
+        }
         return;
     }
 }

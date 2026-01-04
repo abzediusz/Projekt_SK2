@@ -38,7 +38,9 @@ LobbyWindow::LobbyWindow(NetworkManager *net, QWidget *parent)
     roleCombo->addItem("Obserwator");
     roleCombo->addItem("Białe");
     roleCombo->addItem("Czarne");
+    roleCombo->blockSignals(true);  // Blokuj sygnały podczas inicjalizacji
     roleCombo->setCurrentIndex(0); 
+    roleCombo->blockSignals(false);
     layout->addWidget(roleCombo);
     
     // Players info
@@ -240,19 +242,8 @@ void LobbyWindow::onGameStarting()
     countdownTimer->stop();
     network->setGameInProgress(true);
     
-    // Jeśli gracz nie wybrał roli (gra zaczęła się w trakcie logowania),
-    // automatycznie dołącz jako obserwator
-    QString teamColor = network->getTeamColor();
-    if (teamColor.isEmpty() || teamColor == "observer") {
-        // Sprawdź czy ROLE zostało wysłane przez combo box
-        int currentRole = roleCombo->currentIndex();
-        if (currentRole == 0) {
-            // User wybrał obserwatora lub nie zmienił - wyślij ROLE observer
-            network->setRole(0);
-        }
-    }
-    
-    network->joinGame();
+    // NIE wysyłamy JOIN ponownie - został już wysłany w LoginWindow
+    // Otwieramy okno gry bezpośrednio
     GameBoardWindow *game = new GameBoardWindow(network);
     
     // Connect return to lobby signal

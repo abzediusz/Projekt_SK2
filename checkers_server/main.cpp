@@ -33,7 +33,7 @@ struct MoveLog
     string move;
 };
 vector<MoveLog> Log;
-const int TIMEOUT=600000;
+const int TIMEOUT=60000;
 const float X0_B=139;
 const float Y0_B=37;
 const float X0_W=90;
@@ -185,6 +185,10 @@ void zakoncz_gre()
         ready_players=0;
         state="PREPARE";
         spectators.clear();
+        clientChoice.clear();
+        clientColors.clear();
+        game.setCurrentPlayer(0);
+        game.setGameOver(0);
 }
 bool czy_bije(Board board,string przed,string po,int color)
 {
@@ -334,7 +338,9 @@ void wyswietl(int cfd)
                                 queueSend(fd, result);
                                 //queueSend(fd, czarne);
                             }
-                            start1=Clock::now();}
+                            start1=Clock::now();
+                            
+                        }
                             else
                             {
                                 /*write(cfd,biale.c_str(),biale.size());

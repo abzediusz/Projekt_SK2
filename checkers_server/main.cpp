@@ -33,7 +33,7 @@ struct MoveLog
     string move;
 };
 vector<MoveLog> Log;
-const int TIMEOUT=60000;
+const int TIMEOUT=300000;
 const float X0_B=139;
 const float Y0_B=37;
 const float X0_W=90;
@@ -307,7 +307,7 @@ void wyswietl(int cfd)
 
                             }
                             result=result+"|";
-                            for(auto i=0;i<whitePieces.size();i++)
+                            for(auto i=0;i<blackPieces.size();i++)
                             {
                                 string pom=blackPieces[i]->getPosition();
                                 pom=pom+",";
@@ -1296,15 +1296,14 @@ int main(int argc,char** argv) {
                                         }
                                         white.clear();
                                         black.clear();
-                                        blackTex.clear();
-                                        whiteTex.clear();
+                                        
                                         for(int i=0;i<whitePieces.size();i++) {
                                             white.push_back((*whitePieces[i]).getPosition());
-                                            whiteTex.push_back((*whitePieces[i]).getTexture());
+                                            
                                         }
                                         for(int i=0;i<blackPieces.size();i++) {
                                             black.push_back((*blackPieces[i]).getPosition());
-                                            blackTex.push_back((*blackPieces[i]).getTexture());
+                                            
                                         }
 
 
@@ -1322,7 +1321,7 @@ int main(int argc,char** argv) {
                                     }
                                 }
                                     if(blackPieces[ind]->getPosition()[1]=='1') {
-                                        delete blackPieces[ind];
+                                        //delete blackPieces[ind];
                                         blackPieces[ind]=new King(newPosition,1);
                                         was_beaten=0;
                                     }
@@ -1331,7 +1330,7 @@ int main(int argc,char** argv) {
                                 
 
                             }
-                            wyswietl(-1);
+                            
                             white.clear();
     black.clear();
     
@@ -1346,6 +1345,8 @@ int main(int argc,char** argv) {
 
 
     board.setupBoard(white,black);
+    //cout<<blackPieces.size()<<endl;
+    wyswietl(-1);
     if(game.getGameOver())
     {
         zakoncz_gre();
@@ -1409,4 +1410,3 @@ int main(int argc,char** argv) {
 }
     return 0;
     }
-

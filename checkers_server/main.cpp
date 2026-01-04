@@ -33,7 +33,7 @@ struct MoveLog
     string move;
 };
 vector<MoveLog> Log;
-const int TIMEOUT=300000;
+const int TIMEOUT=600000;
 const float X0_B=139;
 const float Y0_B=37;
 const float X0_W=90;
@@ -494,7 +494,15 @@ static void handle_command_prepare(int clientFd, const std::string &line) {
                 std::printf("Klient %s próbuje zmienić rolę podczas gry - zablokowane\n", name);
                 queueSend(clientFd, "OK\n");
                 broadcastPlayers();
-            } else {
+            }
+            else if(state == "PLAY" && spectators.find(clientFd) == spectators.end() && clientColors.find(clientFd)==clientColors.end())
+            {
+                spectators[clientFd]=1;
+                std::printf("Klient %s zostaje obserwatorem\n", name);
+                queueSend(clientFd, "OK\n");
+                broadcastPlayers();
+            }
+             else {
                 // Mapowanie: 0=white, 1=black, -1=observer (zgodne z game.getCurrentPlayer())
                 int c = -1;
                 if (colorStr == "white") c = 0;
@@ -802,6 +810,7 @@ static void handle_command(int clientFd, const std::string &line,string &wynik) 
                     //send(it->first,"TIMEOUT\n",9,0);
                     queueSend(it->first, "TIMEOUT\n");
                 }
+                start1=Clock::now();
                 game.setCurrentPlayer(1-game.getCurrentPlayer());
                 clientChoice.clear();
             votes.clear();

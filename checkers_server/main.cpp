@@ -182,6 +182,7 @@ void zakoncz_gre()
             }
             
         }
+        ready_players=0;
         state="PREPARE";
         spectators.clear();
 }
